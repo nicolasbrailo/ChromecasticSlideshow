@@ -8,8 +8,10 @@ Specify a local path with your pictures, a device to cast to and voila, instant 
 # How to run
 Make sure you have python3.6 and pipenv. This should work in most Linux-like environments:
 
+```
 $ pipenv sync
 $ pipenv run python ./chromecastic_slideshow.py
+```
 
 
 # Setup

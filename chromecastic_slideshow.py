@@ -70,6 +70,11 @@ class FSToWebRandomImager(object):
         """ Note: blocking, doesn't return """
         self.flask_app.run(host=self.public_host, port=self.port, debug=True)
 
+    def run_bg_server(self):
+        """ Note: blocking, doesn't return. Flak's reloader doesn't work in
+        a bg thread, so use this method when running this server from a thread """
+        self.flask_app.run(host=self.public_host, port=self.port, debug=False)
+
     def get_random_image_url(self):
         rnd = time.time() # Add a "random" bit to the url to avoid caching
         return 'http://{}:{}/get_random_image/{}'.format(
@@ -84,12 +89,21 @@ from apscheduler.schedulers.background import BackgroundScheduler
 import pychromecast
 
 class ChromecastDriver(object):
+    class Listener(object):
+        def new_media_status(self, status):
+            print(status)
+
+        def wait_media_status_change(self):
+            pass
+
     def __init__(self, target_chromecast_name, img_url_provider, interval_seconds):
         """
         Run a background task: every $interval seconds to load a new url
         in a chromecast, as provided by $img_url_provider
         Constructor will look for all chromcasts in the network (ie: slow)
         target_chromecast: Name of CC to use
+
+        $img_url_provider should provide a unique URL each time it's called
         """
         self.target_chromecast_name = target_chromecast_name
         self.img_url_provider = img_url_provider
@@ -111,6 +125,10 @@ class ChromecastDriver(object):
         self.cast.wait()
         self.cast.quit_app()
         self.cast.wait()
+
+        # Register callback for status changes
+        self.cc_listener = ChromecastDriver.Listener()
+        self.cast.media_controller.register_status_listener(self.cc_listener)
 
         # Call show_image once to load the first one (otherwise we need to
         # wait for the first interval trigger)
@@ -140,8 +158,26 @@ class ChromecastDriver(object):
         print('Image should be shown')
 
 
-foo = FSRandomImager('/media/laptus/Personal files/Fotos/2012/', ['jpg'])
-bar = FSToWebRandomImager(foo, public_host='192.168.2.200', port=5000)
-baz = ChromecastDriver('Baticueva TV', bar, interval_seconds=45)
-bar.run_server()
+root_path = '/media/laptus/Personal files/Fotos/'
+allowed_extensions = ['jpg']
+public_host = '192.168.2.200'
+listen_port = 5000
+target_chromecast_name = 'Baticueva TV'
+interval_seconds = 45
+
+import threading
+print('Loading images from {}'.format(root_path))
+img_server = FSToWebRandomImager(FSRandomImager(root_path, allowed_extensions),
+                                public_host=public_host, port=listen_port)
+
+# Start image server in BG without blocking (so that CC driver can be started)
+# Webserver needs to be up and listening before cc_driver, otherwise first request
+# will fail
+t = threading.Thread(target=img_server.run_bg_server)
+t.start()
+
+cc_driver = ChromecastDriver(target_chromecast_name, img_server, interval_seconds=interval_seconds)
+
+t.join()
+
 
