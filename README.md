@@ -1,2 +1,6 @@
 # ChromecasticSlideshow
-Use Chromecast to show your own pictures from a local network PC. No need to use any online services.
+
+Show a slideshow in your Chromecast without going through Google Photos (or any other online service).
+Specify a local path with your pictures, a device to cast to and voila, instant slideshow from your local network.
+
+
