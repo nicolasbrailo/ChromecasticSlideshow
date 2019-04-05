@@ -82,7 +82,7 @@ class FSToWebRandomImager(object):
 
 
 
-import atexit
+import atexit, time
 from apscheduler.schedulers.background import BackgroundScheduler
 
 # https://github.com/balloob/pychromecast
@@ -90,11 +90,13 @@ import pychromecast
 
 class ChromecastDriver(object):
     class Listener(object):
-        def new_media_status(self, status):
-            print(status)
+        def __init__(self):
+            self.last_media = None
 
-        def wait_media_status_change(self):
-            pass
+        def new_media_status(self, status):
+            self.last_media = status.content_id
+            # TODO: Detect if content_id doesn't have our server prefix; that
+            # means someone else started playing something and we should seppuku
 
     def __init__(self, target_chromecast_name, img_url_provider, interval_seconds):
         """
@@ -155,7 +157,20 @@ class ChromecastDriver(object):
         # TODO: Hardcoded mime type might break
         self.cast.play_media(url=url, content_type='image/jpeg')
         self.cast.wait()
-        print('Image should be shown')
+
+        timeout_count = 5
+        while timeout_count > 0:
+            if self.cc_listener.last_media == url:
+                print('Image should be shown')
+                break
+
+            timeout_count -= 1
+            time.sleep(1)
+
+        if timeout_count == 0:
+            print('Image display seems to have failed')
+
+
 
 
 root_path = '/media/laptus/Personal files/Fotos/'
