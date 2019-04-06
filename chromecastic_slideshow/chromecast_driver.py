@@ -6,13 +6,26 @@ import pychromecast
 
 class ChromecastDriver(object):
     class Listener(object):
-        def __init__(self):
+        def __init__(self, expected_url_prefix):
+            self.expected_url_prefix = expected_url_prefix
             self.last_media = None
 
         def new_media_status(self, status):
+            # Sometimes empty status appear. Should be safe to ignore since if
+            # content == null then no one must be casting. I hope.
+            if status.content_id is None:
+                return
+
             self.last_media = status.content_id
-            # TODO: Detect if content_id doesn't have our server prefix; that
-            # means someone else started playing something and we should seppuku
+
+            # If content_id doesn't have our server prefix someone else started
+            # casting and we should seppuku
+            if self.last_media.find(self.expected_url_prefix) != 0:
+                print("XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX")
+                print("XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX")
+                print("XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX")
+                print("XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX")
+                print("XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX")
 
     def __init__(self, target_chromecast_name, img_url_provider, interval_seconds):
         """
@@ -45,7 +58,7 @@ class ChromecastDriver(object):
         self.cast.wait()
 
         # Register callback for status changes
-        self.cc_listener = ChromecastDriver.Listener()
+        self.cc_listener = ChromecastDriver.Listener(img_url_provider.get_url_prefix())
         self.cast.media_controller.register_status_listener(self.cc_listener)
 
         # Call show_image once to load the first one (otherwise we need to

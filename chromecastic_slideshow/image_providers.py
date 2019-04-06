@@ -87,9 +87,12 @@ class FSToWebRandomImager(object):
 
         self.bg_thread.join()
 
+    def get_url_prefix(self):
+        """ All URLs ever provided by this component will start with this prefix """
+        return 'http://{}:{}/get_random_image/'.format(self.public_host, self.port)
+
     def get_random_image_url(self):
-        rnd = time.time() # Add a "random" bit to the url to avoid caching
-        return 'http://{}:{}/get_random_image/{}'.format(
-                        self.public_host, self.port, rnd)
+        # Add a "random" bit to the make the url unique and to avoid caching
+        return '{}{}'.format(self.get_url_prefix(), time.time())
 
 
