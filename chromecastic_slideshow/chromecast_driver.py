@@ -6,8 +6,10 @@ import pychromecast
 
 class ChromecastDriver(object):
     class Listener(object):
-        def __init__(self, expected_url_prefix):
+        def __init__(self, expected_url_prefix, 
+                        callback_another_cast_started):
             self.expected_url_prefix = expected_url_prefix
+            self.callback_another_cast_started = callback_another_cast_started
             self.last_media = None
 
         def new_media_status(self, status):
@@ -21,11 +23,7 @@ class ChromecastDriver(object):
             # If content_id doesn't have our server prefix someone else started
             # casting and we should seppuku
             if self.last_media.find(self.expected_url_prefix) != 0:
-                print("XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX")
-                print("XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX")
-                print("XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX")
-                print("XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX")
-                print("XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX")
+                self.callback_another_cast_started()
 
     def __init__(self, target_chromecast_name, img_url_provider, interval_seconds):
         """
@@ -36,6 +34,7 @@ class ChromecastDriver(object):
 
         $img_url_provider should provide a unique URL each time it's called
         """
+        self.cleanup_on_exit = True
         self.target_chromecast_name = target_chromecast_name
         self.img_url_provider = img_url_provider
         self.interval_seconds = interval_seconds
@@ -58,7 +57,8 @@ class ChromecastDriver(object):
         self.cast.wait()
 
         # Register callback for status changes
-        self.cc_listener = ChromecastDriver.Listener(img_url_provider.get_url_prefix())
+        self.cc_listener = ChromecastDriver.Listener(img_url_provider.get_url_prefix(),
+                                self.on_another_cast_started)
         self.cast.media_controller.register_status_listener(self.cc_listener)
 
         # Call show_image once to load the first one (otherwise we need to
@@ -67,16 +67,29 @@ class ChromecastDriver(object):
 
         # Call self every $interval_seconds to reload image
         self.scheduler = BackgroundScheduler()
-        self.scheduler.add_job(func=self.show_image,
+        self.sched_job_obj = self.scheduler.add_job(func=self.show_image,
                                trigger="interval", seconds=interval_seconds)
         self.scheduler.start()
         atexit.register(self.disconnect)
 
+    def on_another_cast_started(self):
+        print('Someone else started casting to {}! Will shutdown...'.format(self.target_chromecast_name))
+        # pychromecast doesn't like shutting down while on a listener thread, so
+        # instead we remove our 'show new image' job and schedule a disconnect
+        # TODO: Seems cant access scheduler from a thread either...
+        self.sched_job_obj.remove()
+        self.cleanup_on_exit = False
+        self.scheduler.add_job(func=self.disconnect, 
+                               trigger="interval", seconds=1)
+
     def disconnect(self):
         print('Shutdown: disconnecting from Chromecast')
         self.scheduler.shutdown()
-        self.cast.quit_app()
-        self.cast.wait()
+
+        if self.cleanup_on_exit:
+            self.cast.quit_app()
+            self.cast.wait()
+
         self.cast.disconnect()
         self.cast.join()
 
@@ -87,6 +100,7 @@ class ChromecastDriver(object):
         self.cast.play_media(url=url, content_type='image/jpeg')
         self.cast.wait()
 
+        # TODO: Configure timeout count
         timeout_count = 5
         while timeout_count > 0:
             if self.cc_listener.last_media == url:
