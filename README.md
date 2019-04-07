@@ -10,7 +10,7 @@ Make sure you have python3.6 and pipenv. This should work in most Linux-like env
 
 ```
 $ pipenv sync
-$ pipenv run python ./chromecastic_slideshow.py
+$ pipenv run python ./chromecastic_slideshow.py -H $YOUR_LAN_IP -c $CHROMECAST_NAME /path/to/pictures
 ```
 
 
