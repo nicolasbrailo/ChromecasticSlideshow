@@ -2,6 +2,9 @@ from chromecastic_slideshow import ChromecasticSlideshow
 import argparse
 import socket
 
+import logging
+import logging.handlers
+import sys
 
 def parse_argv():
     app_descr = """
@@ -27,6 +30,26 @@ https://github.com/nicolasbrailo/ChromecasticSlideshow
     return parser.parse_args()
 
 
+def mk_logger(log_name):
+    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    logger = logging.getLogger(log_name)
+    logger.setLevel(logging.DEBUG)
+
+    handler = logging.handlers.SysLogHandler(address = '/dev/log')
+    handler.setFormatter(formatter)
+    # syslog -> only INFO
+    handler.setLevel(logging.INFO)
+    logger.addHandler(handler)
+
+    handler = logging.StreamHandler(sys.stdout)
+    handler.setFormatter(formatter)
+    # stdout -> verbose
+    handler.setLevel(logging.DEBUG)
+    logger.addHandler(handler)
+
+    return logger
+
+
 args = parse_argv()
 args.allowed_extensions = args.allowed_extensions.split(',')
 
@@ -37,9 +60,11 @@ if args.listen_port == 0:
     args.listen_port = sock.getsockname()[1]
     sock.close()
 
+logger = mk_logger('ChromecasticSlideshow')
 
-print('Loading images from {}'.format(args.root_path))
+logger.info('Loading images from {}'.format(args.root_path))
 
-cs = ChromecasticSlideshow(args.root_path, args.allowed_extensions, args.host,
-            args.listen_port, args.chromecast_name, args.interval_seconds)
+cs = ChromecasticSlideshow(logger, args.root_path, args.allowed_extensions,
+            args.host, args.listen_port, args.chromecast_name,
+            args.interval_seconds)
 
