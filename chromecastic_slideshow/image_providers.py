@@ -1,6 +1,5 @@
 import os
 import random
-import threading
 
 class FSRandomImager(object):
     """ Return random image urls from the local filesystem """
@@ -41,6 +40,7 @@ class FSRandomImager(object):
 
 import flask
 import time
+import threading
 from flask import Flask
 
 class FSToWebRandomImager(object):
@@ -85,7 +85,13 @@ class FSToWebRandomImager(object):
         if self.bg_thread is None:
             raise Exception('Web server not started as background thread')
 
-        self.bg_thread.join()
+        try:
+            self.bg_thread.join()
+        except KeyboardInterrupt:
+            # This Ctrl-C interrupted the join, not Flask, but there doesn't
+            # seem to be an easy way to cleanly shutdown Flask. Return anyway
+            # so others may have a chance to cleanup
+            pass
 
     def get_url_prefix(self):
         """ All URLs ever provided by this component will start with this prefix """

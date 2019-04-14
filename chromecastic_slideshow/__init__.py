@@ -18,4 +18,6 @@ class ChromecasticSlideshow(object):
 
         self.img_server.wait_until_server_finishes()
 
+        self.cc_driver.disconnect()
+
 

@@ -71,6 +71,7 @@ class ChromecastDriver(object):
         self.sched_job_obj = self.scheduler.add_job(func=self.show_image,
                                trigger="interval", seconds=interval_seconds)
         self.scheduler.start()
+
         atexit.register(self.disconnect)
 
     def on_another_cast_started(self):
@@ -78,9 +79,9 @@ class ChromecastDriver(object):
                             format(self.target_chromecast_name))
         # pychromecast doesn't like shutting down while on a listener thread, so
         # instead we remove our 'show new image' job and schedule a disconnect
-        # TODO: Seems cant access scheduler from a thread either...
         self.sched_job_obj.remove()
         self.cleanup_on_exit = False
+        print("RQ CLEAN SHUTDOWN")
         self.scheduler.add_job(func=self.disconnect, 
                                trigger="interval", seconds=1)
 
@@ -110,7 +111,10 @@ class ChromecastDriver(object):
                 break
 
             timeout_count -= 1
-            time.sleep(1)
+            try:
+                time.sleep(1)
+            except Exception as ex:
+                raise ex
 
         if timeout_count == 0:
             self.logger.error('Image display seems to have failed')
