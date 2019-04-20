@@ -72,6 +72,7 @@ class ChromecastDriver(object):
                                trigger="interval", seconds=interval_seconds)
         self.scheduler.start()
 
+        # TODO: Move from atexit to main obj?
         atexit.register(self.disconnect)
 
     def on_another_cast_started(self):
