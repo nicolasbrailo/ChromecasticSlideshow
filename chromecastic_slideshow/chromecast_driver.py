@@ -4,6 +4,19 @@ from apscheduler.schedulers.background import BackgroundScheduler
 # https://github.com/balloob/pychromecast
 import pychromecast
 
+import logging
+log = logging.getLogger(__name__)
+
+def _get_cc(cc_name):
+    log.info('Looking for all Chromecasts in the network')
+    all_casts = pychromecast.get_chromecasts()
+
+    all_cast_names = [cc.name for cc in all_casts[0]]
+    if cc_name not in all_cast_names:
+        raise KeyError(f'Chromecast {cc_name} not found. Available: {all_cast_names}')
+    return [cc for cc in all_casts[0] if cc.name == cc_name][0]
+
+
 class ChromecastDriver(object):
     class Listener(object):
         def __init__(self, expected_url_prefix, 
@@ -25,7 +38,7 @@ class ChromecastDriver(object):
             if self.last_media.find(self.expected_url_prefix) != 0:
                 self.callback_another_cast_started()
 
-    def __init__(self, logger, target_chromecast_name, img_url_provider, interval_seconds):
+    def __init__(self, target_chromecast_name, img_url_provider, interval_seconds):
         """
         Run a background task: every $interval seconds to load a new url
         in a chromecast, as provided by $img_url_provider
@@ -35,32 +48,21 @@ class ChromecastDriver(object):
         $img_url_provider should provide a unique URL each time it's called
         """
         self.cleanup_on_exit = True
-        self.logger = logger
         self.target_chromecast_name = target_chromecast_name
         self.img_url_provider = img_url_provider
-        self.interval_seconds = interval_seconds
 
-        # Try to find the right chromecast
-        self.logger.info('Looking for all Chromecasts in the network')
-        all_casts = pychromecast.get_chromecasts()
-        try:
-            self.cast = next(cc for cc in all_casts
-                            if cc.device.friendly_name == target_chromecast_name)
-        except StopIteration:
-            all_casts_names = [cc.device.friendly_name for cc in all_casts]
-            self.logger.error('Chromecast {} not found. These are available: {}'.format(
-                                target_chromecast, all_casts_names))
-            raise pychromecast.NoChromecastFoundError()
+        # Get target CC or throw
+        self._cc = _get_cc(target_chromecast_name)
 
-        self.logger.info('Found {}, connecting...'.format(self.target_chromecast_name))
-        self.cast.wait()
-        self.cast.quit_app()
-        self.cast.wait()
+        log.info('Found ChromeCast %s, connecting...', target_chromecast_name)
+        self._cc.wait()
+        self._cc.quit_app()
+        self._cc.wait()
 
         # Register callback for status changes
         self.cc_listener = ChromecastDriver.Listener(img_url_provider.get_url_prefix(),
                                 self.on_another_cast_started)
-        self.cast.media_controller.register_status_listener(self.cc_listener)
+        self._cc.media_controller.register_status_listener(self.cc_listener)
 
         # Call show_image once to load the first one (otherwise we need to
         # wait for the first interval trigger)
@@ -69,15 +71,14 @@ class ChromecastDriver(object):
         # Call self every $interval_seconds to reload image
         self.scheduler = BackgroundScheduler()
         self.sched_job_obj = self.scheduler.add_job(func=self.show_image,
-                               trigger="interval", seconds=interval_seconds)
+                               trigger="interval", seconds=int(interval_seconds))
         self.scheduler.start()
 
         # TODO: Move from atexit to main obj?
         atexit.register(self.disconnect)
 
     def on_another_cast_started(self):
-        self.logger.info('Someone else started casting to {}! Will shutdown...'.\
-                            format(self.target_chromecast_name))
+        log.info('Someone else started casting to %s! Will shutdown...', self.target_chromecast_name)
         # pychromecast doesn't like shutting down while on a listener thread, so
         # instead we remove our 'show new image' job and schedule a disconnect
         self.sched_job_obj.remove()
@@ -87,28 +88,28 @@ class ChromecastDriver(object):
                                trigger="interval", seconds=1)
 
     def disconnect(self):
-        self.logger.info('Shutdown: disconnecting from Chromecast')
+        log.info('Shutdown: disconnecting from Chromecast')
         self.scheduler.shutdown()
 
         if self.cleanup_on_exit:
-            self.cast.quit_app()
-            self.cast.wait()
+            self._cc.quit_app()
+            self._cc.wait()
 
-        self.cast.disconnect()
-        self.cast.join()
+        self._cc.disconnect()
+        self._cc.join()
 
     def show_image(self):
         url = self.img_url_provider.get_random_image_url()
-        self.logger.info('Asking CC {} to load image {}'.format(self.target_chromecast_name, url))
+        log.info('Asking CC %s to load image %s', self.target_chromecast_name, url)
         # TODO: Hardcoded mime type might break
-        self.cast.play_media(url=url, content_type='image/jpeg')
-        self.cast.wait()
+        self._cc.play_media(url=url, content_type='image/jpeg')
+        self._cc.wait()
 
         # TODO: Configure timeout count
         timeout_count = 5
         while timeout_count > 0:
             if self.cc_listener.last_media == url:
-                self.logger.debug('Image should be shown')
+                log.debug('Image should be shown')
                 break
 
             timeout_count -= 1
@@ -118,6 +119,6 @@ class ChromecastDriver(object):
                 raise ex
 
         if timeout_count == 0:
-            self.logger.error('Image display seems to have failed')
+            log.error('Image display seems to have failed')
 
 

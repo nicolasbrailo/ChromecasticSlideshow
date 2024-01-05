@@ -41,7 +41,8 @@ class FSRandomImager(object):
 import flask
 import time
 import threading
-from flask import Flask
+from flask import Flask, redirect
+from werkzeug.serving import make_server
 
 class FSToWebRandomImager(object):
     """
@@ -55,12 +56,16 @@ class FSToWebRandomImager(object):
         port: Listen port
     """
     def __init__(self, fs_random_imager, public_host, port):
-        self.bg_thread = None
-        self.fs_random_imager = fs_random_imager
         self.public_host = public_host
         self.port = port
+        self.fs_random_imager = fs_random_imager
         self.flask_app = Flask(__name__)
+        self.server = make_server(public_host, port, self.flask_app)
+        self.bg_thread = threading.Thread(target=self.server.serve_forever)
 
+        @self.flask_app.route('/')
+        def _idx():
+            return redirect(url_for('/get_random_image/1234'))
         @self.flask_app.route('/get_random_image/<rnd_bit>')
         def _get_random_image(rnd_bit):
             img = fs_random_imager.get_random_image_url()
@@ -69,22 +74,12 @@ class FSToWebRandomImager(object):
             return flask.send_from_directory(path, fn)
 
     def run_server(self):
-        """ Note: blocking, doesn't return """
-        self.flask_app.run(host=self.public_host, port=self.port, debug=True)
-
-    def setup_server(self):
-        """ Note: non-blocking. Flak's reloader doesn't work in a bg thread, so
-        use this method when running this server from a thread """
-        def _run():
-            self.flask_app.run(host=self.public_host, port=self.port, debug=False)
-
-        self.bg_thread = threading.Thread(target=_run)
         self.bg_thread.start()
 
-    def wait_until_server_finishes(self):
-        if self.bg_thread is None:
-            raise Exception('Web server not started as background thread')
+    def stop(self):
+        self.server.shutdown()
 
+    def wait_until_server_finishes(self):
         try:
             self.bg_thread.join()
         except KeyboardInterrupt:

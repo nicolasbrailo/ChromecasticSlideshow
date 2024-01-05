@@ -6,9 +6,28 @@ import logging
 import logging.handlers
 import sys
 
+fmt = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+
+stdout_log = logging.StreamHandler(sys.stdout)
+stdout_log.setLevel(logging.DEBUG)
+stdout_log.setFormatter(fmt)
+
+syslog = logging.handlers.SysLogHandler()
+syslog.setLevel(logging.INFO)
+syslog.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
+
+root = logging.getLogger()
+root.setLevel(logging.DEBUG)
+root.addHandler(stdout_log)
+root.addHandler(syslog)
+
+log = logging.getLogger(__name__)
+
+
 def parse_argv():
     app_descr = """
-ChromecasticSlideshow: Slideshows in Chromecast directly from your filesystem, without going through any online service. No Google Photos, Facebook or anything else: plain old random files straight from your disk to your Chromecast.
+ChromecasticSlideshow: Slideshows in Chromecast directly from your filesystem, without going through any online service.
+No Google Photos, Facebook or anything else: plain old random files straight from your disk, to your Chromecast.
 
 https://github.com/nicolasbrailo/ChromecasticSlideshow
 """
@@ -30,25 +49,6 @@ https://github.com/nicolasbrailo/ChromecasticSlideshow
     return parser.parse_args()
 
 
-def mk_logger(log_name):
-    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-    logger = logging.getLogger(log_name)
-    logger.setLevel(logging.DEBUG)
-
-    handler = logging.handlers.SysLogHandler(address = '/dev/log')
-    handler.setFormatter(formatter)
-    # syslog -> only INFO
-    handler.setLevel(logging.INFO)
-    logger.addHandler(handler)
-
-    handler = logging.StreamHandler(sys.stdout)
-    handler.setFormatter(formatter)
-    # stdout -> verbose
-    handler.setLevel(logging.DEBUG)
-    logger.addHandler(handler)
-
-    return logger
-
 
 args = parse_argv()
 args.allowed_extensions = args.allowed_extensions.split(',')
@@ -60,11 +60,9 @@ if args.listen_port == 0:
     args.listen_port = sock.getsockname()[1]
     sock.close()
 
-logger = mk_logger('ChromecasticSlideshow')
+log.info('Loading images from %s', args.root_path)
 
-logger.info('Loading images from {}'.format(args.root_path))
-
-cs = ChromecasticSlideshow(logger, args.root_path, args.allowed_extensions,
+cs = ChromecasticSlideshow(args.root_path, args.allowed_extensions,
             args.host, args.listen_port, args.chromecast_name,
-            args.interval_seconds)
+            int(args.interval_seconds))
 
